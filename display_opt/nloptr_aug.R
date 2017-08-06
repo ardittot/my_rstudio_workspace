@@ -99,5 +99,5 @@ res <- nloptr(x0=c(rep(0,11)),
               eval_g_ineq = eq,
               opts = list("algorithm"="NLOPT_LN_AUGLAG","maxeval"=num_iter,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
 print(res)
-#file_save <- "C:\\Users\\t-anthony.prayugo\\Documents\\project\\timeseries\\nloptr_res.csv"
+#file_save <- ""
 #write.csv(res$solution,file_save)
