@@ -12,12 +12,6 @@ library(bsts)
 library(reshape)
 library(dplyr)
 
-# file_historical <- "./data_input_historical_cost.csv"
-# file_budseas <- "./data_input_budgetseason.csv"
-# param_month <- as.Date("2017-07-01","%Y-%m-%d")
-# param_season <- 0
-# param_budget <- 6.858
-
 createModel <- function(df_historical,df_budseas){
   #### Seasonality & Budget ####
   # df_budseas <- read.csv(file_budseas, header = TRUE)
