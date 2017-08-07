@@ -37,16 +37,25 @@ eq <- function(b) {
   return(c(c1,c2,c3))
 }
 
+B_lower <- rep(0,11)
+B_upper <- c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6,525.441,21842.27,3772.961,30000,53340.3)
+init_point <- B_upper - 100
 t0 <- proc.time()
-res <- nloptr(x0=c(rep(0,11)),
-              eval_f=fn1,
-              lb = c(rep(0,11)),
-              ub = c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6,525.441,21842.27,3772.961,30000,53340.3),
-              # ub = c(rep(Total_budget,11)),
-              eval_g_ineq = eq,
-              opts = list("algorithm"="NLOPT_LN_AUGLAG","maxeval"=num_iter,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
-t1 <- proc.time(); print(t1-t0)
+res <- nloptr(
+    x0 = init_point,
+    eval_f=fn1,
+    lb = B_lower,
+    ub = B_upper,
+    eval_g_ineq = eq,
+    opts = list("algorithm"="NLOPT_LN_AUGLAG","maxeval"=num_iter,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
+t1 <- proc.time(); print(t1-t0) # 1822 sec
 print(res$solution)
+
+df_pred$budget_channel <- res$solution
+sum(df_pred$budget_channel) # = 767873.5
+constr <- predictModelAll(df_pred$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
+constr$CA_flight # = 29657.7
+constr$CA_hotel # = 11595.33
 
 #file_save <- ""
 #write.csv(res$solution,file_save)
