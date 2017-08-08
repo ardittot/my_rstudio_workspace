@@ -57,11 +57,11 @@ t1 <- proc.time(); print(t1-t0) # 1822 sec
 print(res$solution)
 
 df_pred$budget_channel <- res$solution
-sum(df_pred$budget_channel) # = 767873.5
 constr <- predictModelAll(df_pred$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
-data_result <- constr$tbl
-constr$CA_flight # = 29657.7
-constr$CA_hotel # = 11595.33
+df_pred$budget <- sum(df_pred$budget_channel)
+df_pred$CA_flight <- constr$CA_flight
+df_pred$CA_hotel <- constr$CA_hotel
+View(df_pred)
 
 #file_save <- ""
 #write.csv(res$solution,file_save)
