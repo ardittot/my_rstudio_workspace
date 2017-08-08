@@ -122,8 +122,8 @@ prepareTSDataPred <- function(file_to_pred, Season, Total_budget){
 
 ## *** Model 2: Regression model to predict CA *** ##
 library(datarobot)
-#ConnectToDataRobot(token='OIrd03JlWbo4q42PASFdHztbC5rmYe0N', endpoint ='http://data-datarobot-apps-01.prod.data.tvlk.cloud/api/v2')
-ConnectToDataRobot(token='OIrd03JlWbo4q42PASFdHztbC5rmYe0N', endpoint ='http://tvlk-data-datarobot-apps-lb-1080587125.ap-southeast-1.elb.amazonaws.com/api/v2')
+ConnectToDataRobot(token='OIrd03JlWbo4q42PASFdHztbC5rmYe0N', endpoint ='http://data-datarobot-apps-01.prod.data.tvlk.cloud/api/v2')
+#ConnectToDataRobot(token='OIrd03JlWbo4q42PASFdHztbC5rmYe0N', endpoint ='http://tvlk-data-datarobot-apps-lb-1080587125.ap-southeast-1.elb.amazonaws.com/api/v2')
 
 prepareDRDataset <- function(df){
   # df$Channel <- fixChannelName(df$Channel) # spl <- strsplit(x, "-")[[1]]
@@ -264,6 +264,6 @@ predictModelAll <- function(budget_prop, Season, Total_budget, CA_flight_target,
   df_pred_CA <- predictDRModel(df_pred_CA, PARAM_model_CA_hotel, PARAM_model_CA_hotel, "CA_hotel")
   CA_flight <- sum(df_pred_CA$CA_flight)
   CA_hotel <- sum(df_pred_CA$CA_hotel)
-  res <- list("CA_flight"=CA_flight, "CA_hotel"=CA_hotel)
+  res <- list("CA_flight"=CA_flight, "CA_hotel"=CA_hotel, "tbl"=df_pred_CA)
   return(res)
 }

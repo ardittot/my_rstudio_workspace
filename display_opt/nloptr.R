@@ -1,16 +1,18 @@
 rm(list=ls())
 setwd("~/workspace/r/display_opt/")
+# setwd("~/MTA_Display_Opt/")
 
 library(nloptr)
 #flight
 #hotel
 
-Total_budget <- 688000
+Total_budget <- 690000
 Season <- 0
-CA_flight_target <- 35000
-CA_hotel_target <- 27500
+CA_flight_target <- 30000
+CA_hotel_target <- 12000
 
-num_iter <- 100
+nlopt_num_iter <- 100
+nlopt_xtol_abs <- 100
 WB <- 1
 WH <- 1
 WF <- 1
@@ -38,22 +40,26 @@ eq <- function(b) {
 }
 
 B_lower <- rep(0,11)
-B_upper <- c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6,525.441,21842.27,3772.961,30000,53340.3)
-init_point <- B_upper - 100
+# B_upper <- c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6,525.441,21842.27,3772.961,30000,53340.3)
+B_upper <- rep(Total_budget,11)
+# init_point <- B_upper - 100
+init_point <- rep(Total_budget/11, 11)
 t0 <- proc.time()
 res <- nloptr(
-    x0 = init_point,
-    eval_f=fn1,
-    lb = B_lower,
-    ub = B_upper,
-    eval_g_ineq = eq,
-    opts = list("algorithm"="NLOPT_LN_AUGLAG","maxeval"=num_iter,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
+  x0 = init_point,
+  eval_f=fn1,
+  lb = B_lower,
+  ub = B_upper,
+  eval_g_ineq = eq,
+  # opts = list("algorithm"="NLOPT_LN_AUGLAG","maxeval"=nlopt_num_iter,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
+  opts = list("algorithm"="NLOPT_LN_AUGLAG","xtol_abs"=nlopt_xtol_abs,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
 t1 <- proc.time(); print(t1-t0) # 1822 sec
 print(res$solution)
 
 df_pred$budget_channel <- res$solution
 sum(df_pred$budget_channel) # = 767873.5
 constr <- predictModelAll(df_pred$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
+data_result <- constr$tbl
 constr$CA_flight # = 29657.7
 constr$CA_hotel # = 11595.33
 
