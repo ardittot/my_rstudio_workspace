@@ -155,6 +155,7 @@ trainDRModel <- function(df, response_var){
 getDRProject <- function(response_var){
   proj_name <- paste("MTA: Display Opt -",response_var)
   proj_id <- GetProjectList()$projectId[GetProjectList()$projectName %in% proj_name]
+  proj_id <- proj_id[1]
   proj <- GetProject(proj_id)
   return(proj)
 }
@@ -193,6 +194,7 @@ predictDRModel <- function(df, project, model, response_var){
   bestPredictJobId <- RequestPredictionsForDataset(project, model$modelId, dataset$id)
   bestPredictions <- GetPredictions(project, bestPredictJobId)
   res[,response_var] <- bestPredictions
+  DeletePredictionDataset(project, dataset$id)
   return(res)
 }
 
@@ -265,5 +267,24 @@ predictModelAll <- function(budget_prop, Season, Total_budget, CA_flight_target,
   CA_flight <- sum(df_pred_CA$CA_flight)
   CA_hotel <- sum(df_pred_CA$CA_hotel)
   res <- list("CA_flight"=CA_flight, "CA_hotel"=CA_hotel, "tbl"=df_pred_CA)
+  return(res)
+}
+
+## *** Model 4: Additional Functions *** ##
+getUpperBoundBudgetChannel <- function(Total_budget, file_DR_dataset){
+  # Total_budget <- 688000
+  # file_DR_dataset <- "./data_input_datarobot.csv"
+  df <- read.csv(file_DR_dataset)
+  ub <- rep(Total_budget, nrow(df_pred))
+  init <- rep(0, nrow(df_pred))
+  for (i in 1:nrow(df_pred)){
+    ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
+    # ch <- "android - FB App Install"
+    ch_cost <- filter(df, (as.character(channel) == ch) & !(is.na(cost)))$cost
+    maxcost <- min(Total_budget, max(ch_cost)*1.1)
+    initcost <- min(Total_budget, quantile(ch_cost,0.5))
+    ub[i] <- maxcost; init[i] <- initcost
+  }
+  res <- list("ub"=ub, "init"=init)
   return(res)
 }

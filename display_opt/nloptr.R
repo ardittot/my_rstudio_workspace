@@ -8,8 +8,8 @@ library(nloptr)
 
 Total_budget <- 690000
 Season <- 0
-CA_flight_target <- 30000
-CA_hotel_target <- 12000
+CA_flight_target <- 35000
+CA_hotel_target <- 20000
 
 nlopt_num_iter <- 100
 nlopt_xtol_abs <- 100
@@ -24,6 +24,7 @@ file_DR_dataset <- "./data_input_datarobot.csv"
 
 source("./displayopt_lib.R")
 model <- runModelAll(file_historical, file_budseas)
+# model <- runModelAll(file_historical, file_budseas, file_DR_dataset)
 df_pred <- prepareTSDataPred(file_to_pred, Season, Total_budget)
 
 fn1 <- function (b) {
@@ -41,9 +42,11 @@ eq <- function(b) {
 
 B_lower <- rep(0,11)
 # B_upper <- c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6,525.441,21842.27,3772.961,30000,53340.3)
-B_upper <- rep(Total_budget,11)
+# B_upper <- rep(Total_budget,11)
+B_upper <- getUpperBoundBudgetChannel(Total_budget, file_DR_dataset)$ub
 # init_point <- B_upper - 100
-init_point <- rep(Total_budget/11, 11)
+# init_point <- rep(Total_budget/11, 11)
+init_point <- getUpperBoundBudgetChannel(Total_budget, file_DR_dataset)$init
 t0 <- proc.time()
 res <- nloptr(
   x0 = init_point,
@@ -57,11 +60,23 @@ t1 <- proc.time(); print(t1-t0) # 1822 sec
 print(res$solution)
 
 df_pred$budget_channel <- res$solution
-sum(df_pred$budget_channel) # = 767873.5
 constr <- predictModelAll(df_pred$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
-data_result <- constr$tbl
-constr$CA_flight # = 29657.7
-constr$CA_hotel # = 11595.33
+df_pred$budget <- sum(df_pred$budget_channel)
+df_pred$CA_flight <- constr$CA_flight
+df_pred$CA_hotel <- constr$CA_hotel
+View(df_pred)
+file_save <- "./data_output_result.csv"
+write.csv(df_pred,file_save)
 
-#file_save <- ""
-#write.csv(res$solution,file_save)
+## Additional step
+if (sum(df_pred$budget_channel) < Total_budget){
+  df_result <- df_pred
+  df_result$budget <- Total_budget
+  df_result$budget_channel <- df_pred$budget_channel * Total_budget / df_pred$budget
+  constr <- predictModelAll(df_result$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_result)
+  df_result$CA_flight <- constr$CA_flight
+  df_result$CA_hotel <- constr$CA_hotel
+  View(df_result)
+  file_save <- "./data_output_result_modif.csv"
+  write.csv(df_pred,file_save)
+}
