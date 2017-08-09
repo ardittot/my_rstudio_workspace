@@ -1,6 +1,6 @@
 library(nloptr)
 
-runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR_dataset, Total_budget, Season, CA_flight_target, CA_hotel_target, num_iter=NULL, retrain=FALSE) {
+runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR_dataset, Total_budget, Season, CA_flight_target, CA_hotel_target, num_iter=NULL, init_budget=NULL, upper_budget=NULL, lower_budget=NULL, retrain=FALSE, forceMaxBudget=FALSE) {
   nlopt_num_iter <- num_iter
   nlopt_xtol_abs <- 100
   WB <- 1
@@ -28,9 +28,29 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
     return(c(c1,c2,c3))
   }
   
-  B_lower <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$lb
-  B_upper <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$ub
-  init_point <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$init
+  if (is.null(lower_budget)){
+    B_lower <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$lb
+  } else {
+    if (length(lower_budget)==1){
+      B_lower <- rep(lower_budget,nrow(df_pred))
+    } else {
+      B_lower <- lower_budget
+    }
+  }
+  if (is.null(upper_budget)){
+    B_upper <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$ub
+  } else {
+    if (length(upper_budget)==1){
+      B_upper <- rep(upper_budget,nrow(df_pred))
+    } else {
+      B_upper <- upper_budget
+    }
+  }
+  if (is.null(init_budget)){
+    init_point <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$init
+  } else {
+    init_point <- init_budget
+  }
   # print(paste("LB =",B_lower))
   # print(paste("Init =",init_point))
   # print(paste("UB =",B_upper))
@@ -53,22 +73,26 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
   
   df_result <- df_pred
   df_result$budget_channel <- res$solution
-  constr <- predictModelAll(df_result$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_result)
   df_result$budget <- sum(df_result$budget_channel)
-  df_result$CA_flight <- constr$CA_flight
-  df_result$CA_hotel <- constr$CA_hotel
+  constr <- predictModelAll(df_result$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_result)
+  df_result$CA_flight <- constr$tbl$CA_flight
+  df_result$CA_hotel  <- constr$tbl$CA_hotel
+  df_result$Total_CA_flight <- constr$CA_flight
+  df_result$Total_CA_hotel  <- constr$CA_hotel
   # View(df_result)
   # file_save <- "./data_output_result.csv"
   # write.csv(df_result,file_save)
   
   ## Additional step
-  # df_result <- read.csv("./data_output_result.csv", header=TRUE)
-  if (sum(df_result$budget_channel) < Total_budget){
+  if (forceMaxBudget & (sum(df_result$budget_channel) < Total_budget)) {
     df_result$budget_channel <- df_result$budget_channel * Total_budget / df_result$budget
     df_result$budget <- Total_budget
+    df_result <- normalizeResult(Total_budget, file_DR_dataset, df_result)
     constr <- predictModelAll(df_result$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_result)
-    df_result$CA_flight <- constr$CA_flight
-    df_result$CA_hotel <- constr$CA_hotel
+    df_result$CA_flight <- constr$tbl$CA_flight
+    df_result$CA_hotel  <- constr$tbl$CA_hotel
+    df_result$Total_CA_flight <- constr$CA_flight
+    df_result$Total_CA_hotel  <- constr$CA_hotel
     # View(df_result)
     # file_save <- "./data_output_result_fixed.csv"
     # write.csv(df_result,file_save)

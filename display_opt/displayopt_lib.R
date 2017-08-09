@@ -311,3 +311,29 @@ getNLOptParam <- function(Total_budget, file_DR_dataset, df_pred){
   res <- list("ub"=ub, "lb"=lb, "init"=init)
   return(res)
 }
+
+normalizeResult <- function(Total_budget, file_DR_dataset, df){
+  df_data <- read.csv(file_DR_dataset)
+  df_pred <- df
+  ub <- rep(Total_budget, nrow(df_pred))
+  lb <- rep(0,nrow(df_pred))
+  init <- rep(0, nrow(df_pred))
+  for (i in 1:nrow(df_pred)){
+    ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
+    # ch <- "android - FB App Install"
+    ch_cost <- df_data %>%
+      mutate(month=as.Date(month, "%m/%d/%Y")) %>%
+      filter((as.character(channel) == ch) & !(is.na(cost))) %>%
+      mutate(cost=cost*Total_budget/budget) %>%
+      arrange(month) %>%
+      tail(3)
+    maxcost <- min(Total_budget, quantile(ch_cost$cost, 0.99)*1.2)
+    mincost <- max(0, quantile(ch_cost$cost, 0.00)*0.8)
+    initcost <- min(Total_budget, quantile(ch_cost$cost,0.5))
+    # ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
+    val <- df_pred[i,"budget_channel"]
+    val <- ifelse(val>=maxcost, 0.99*maxcost, val)
+    df_pred[i,"budget_channel"] <- val
+  }
+  return(df_pred)
+}
