@@ -289,20 +289,25 @@ predictModelAll <- function(budget_prop, Season, Total_budget, CA_flight_target,
 }
 
 ## *** Model 4: Additional Functions *** ##
-getNLOptParam <- function(Total_budget, file_DR_dataset){
-  # Total_budget <- 688000
-  # file_DR_dataset <- "./data_input_datarobot.csv"
+getNLOptParam <- function(Total_budget, file_DR_dataset, df_pred){
   df <- read.csv(file_DR_dataset)
   ub <- rep(Total_budget, nrow(df_pred))
+  lb <- rep(0,nrow(df_pred))
   init <- rep(0, nrow(df_pred))
   for (i in 1:nrow(df_pred)){
     ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
     # ch <- "android - FB App Install"
-    ch_cost <- filter(df, (as.character(channel) == ch) & !(is.na(cost)))$cost
-    maxcost <- min(Total_budget, max(ch_cost)*1.1)
-    initcost <- min(Total_budget, quantile(ch_cost,0.5))
-    ub[i] <- maxcost; init[i] <- initcost
+    ch_cost <- df%>%
+      mutate(month=as.Date(month, "%m/%d/%Y")) %>%
+      filter((as.character(channel) == ch) & !(is.na(cost))) %>%
+      mutate(cost=cost*Total_budget/budget) %>%
+      arrange(month) %>%
+      tail(3)
+    maxcost <- min(Total_budget, quantile(ch_cost$cost, 0.99)*1.2)
+    mincost <- max(0, quantile(ch_cost$cost, 0.00)*0.8)
+    initcost <- min(Total_budget, quantile(ch_cost$cost,0.5))
+    ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
   }
-  res <- list("ub"=ub, "init"=init)
+  res <- list("ub"=ub, "lb"=lb, "init"=init)
   return(res)
 }
