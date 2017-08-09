@@ -297,15 +297,16 @@ getNLOptParam <- function(Total_budget, file_DR_dataset, df_pred){
   for (i in 1:nrow(df_pred)){
     ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
     # ch <- "android - FB App Install"
-    ch_cost <- df%>%
+    ch_cost <- df %>%
       mutate(month=as.Date(month, "%m/%d/%Y")) %>%
       filter((as.character(channel) == ch) & !(is.na(cost))) %>%
+      mutate(budget=ifelse(budget>Total_budget, Total_budget, budget)) %>%
       mutate(cost=cost*Total_budget/budget) %>%
       arrange(month) %>%
       tail(3)
-    maxcost <- min(Total_budget, quantile(ch_cost$cost, 0.99)*1.2)
-    mincost <- max(0, quantile(ch_cost$cost, 0.00)*0.8)
-    initcost <- min(Total_budget, quantile(ch_cost$cost,0.5))
+    maxcost <- min(Total_budget, quantile(ch_cost$cost, 1.00)*1.25)
+    mincost <- max(0,            quantile(ch_cost$cost, 0.00)*0.75)
+    initcost <- min(Total_budget, quantile(ch_cost$cost, 0.8))
     ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
   }
   res <- list("ub"=ub, "lb"=lb, "init"=init)
@@ -324,12 +325,13 @@ normalizeResult <- function(Total_budget, file_DR_dataset, df){
     ch_cost <- df_data %>%
       mutate(month=as.Date(month, "%m/%d/%Y")) %>%
       filter((as.character(channel) == ch) & !(is.na(cost))) %>%
+      mutate(budget=ifelse(budget>Total_budget, Total_budget, budget)) %>%
       mutate(cost=cost*Total_budget/budget) %>%
       arrange(month) %>%
       tail(3)
-    maxcost <- min(Total_budget, quantile(ch_cost$cost, 0.99)*1.2)
-    mincost <- max(0, quantile(ch_cost$cost, 0.00)*0.8)
-    initcost <- min(Total_budget, quantile(ch_cost$cost,0.5))
+    maxcost <- min(Total_budget, quantile(ch_cost$cost, 1.00)*1.25)
+    mincost <- max(0,            quantile(ch_cost$cost, 0.00)*0.75)
+    initcost <- min(Total_budget, quantile(ch_cost$cost, 0.8))
     # ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
     val <- df_pred[i,"budget_channel"]
     val <- ifelse(val>=maxcost, 0.99*maxcost, val)
