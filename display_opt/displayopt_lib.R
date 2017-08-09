@@ -138,6 +138,9 @@ prepareDRDataset <- function(df){
     mutate(Sum_Install=as.numeric(Sum_Install)) %>%
     mutate(CA_flight=as.numeric(CA_flight)) %>%
     mutate(CA_hotel=as.numeric(CA_hotel))
+  res_HIGH <- res %>% filter(tier=="HIGH")
+  # res_HIGH <- res_HIGH[sample(1:nrow(res_HIGH), nrow(res_HIGH), replace=TRUE),]
+  res <- rbind(res, res_HIGH) %>% arrange(month,channel)
   return(res)
 }
 
@@ -147,17 +150,21 @@ trainDRModel <- function(df, response_var){
   df1 <- df1 %>% filter(!is.na(cost))
   project_name <- paste("MTA: Display Opt -",response_var)
   project <- SetupProject(dataSource = df1, projectName = project_name)
-  SetTarget(project = project, target = response_var)
+  SetTarget(project = project, target = response_var, metric = "RMSE")
   WaitForAutopilot(project = project)
   return(project)
 }
 
-getDRProject <- function(response_var){
-  proj_name <- paste("MTA: Display Opt -",response_var)
+getDRProject <- function(proj_name){
   proj_id <- GetProjectList()$projectId[GetProjectList()$projectName %in% proj_name]
   proj_id <- proj_id[1]
   proj <- GetProject(proj_id)
   return(proj)
+}
+
+getDRProjectMultiple <- function(proj_name){
+  proj_id <- GetProjectList()$projectId[GetProjectList()$projectName %in% proj_name]
+  return(proj_id)
 }
 
 getDRModelBest <- function(project){
@@ -214,12 +221,23 @@ runModelAll <- function(file_historical, file_budget_season, file_DR_dataset=NUL
     # a. Prepare dataset & run model training
     df_dr_raw <- read.csv(file_DR_dataset)
     df <- prepareDRDataset(df_dr_raw)
+    # Rename the existing project into the old one
+    proj_CA_flight <- getDRProject("MTA: Display Opt - CA_flight")
+    proj_CA_hotel  <- getDRProject("MTA: Display Opt - CA_hotel")
+    UpdateProject(project=proj_CA_flight, newProjectName="MTA: Display Opt - CA_flight (old)")
+    UpdateProject(project=proj_CA_hotel, newProjectName="MTA: Display Opt - CA_hotel (old)")
+    # Remove the older projects
+    proj_CA_flight <- getDRProjectMultiple("MTA: Display Opt - CA_flight (old)")
+    proj_CA_hotel  <- getDRProjectMultiple("MTA: Display Opt - CA_hotel (old)")
+    if (length(proj_CA_flight)>1) { for (p in proj_CA_flight[2:length(proj_CA_flight)]){ DeleteProject(p) } }
+    if (length(proj_CA_hotel)>1) { for (p in proj_CA_hotel[2:length(proj_CA_flight)]){ DeleteProject(p) } }
+    # Train the model
     proj_CA_flight <- trainDRModel(df, "CA_flight")
     proj_CA_hotel <- trainDRModel(df, "CA_hotel")
   } else {
-    # b. Get the project & model
-    proj_CA_flight <- getDRProject("CA_flight")
-    proj_CA_hotel <- getDRProject("CA_hotel")
+    # b. Get existing project & model
+    proj_CA_flight <- getDRProject("MTA: Display Opt - CA_flight")
+    proj_CA_hotel  <- getDRProject("MTA: Display Opt - CA_hotel")
   }
   model_CA_flight <- getDRModelBest(proj_CA_flight)
   model_CA_hotel <- getDRModelBest(proj_CA_hotel)
@@ -271,7 +289,7 @@ predictModelAll <- function(budget_prop, Season, Total_budget, CA_flight_target,
 }
 
 ## *** Model 4: Additional Functions *** ##
-getUpperBoundBudgetChannel <- function(Total_budget, file_DR_dataset){
+getNLOptParam <- function(Total_budget, file_DR_dataset){
   # Total_budget <- 688000
   # file_DR_dataset <- "./data_input_datarobot.csv"
   df <- read.csv(file_DR_dataset)
