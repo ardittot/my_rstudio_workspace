@@ -1,13 +1,13 @@
 library(nloptr)
+source("./displayopt_lib.R")
 
 runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR_dataset, Total_budget, Season, CA_flight_target, CA_hotel_target, num_iter=NULL, init_budget=NULL, upper_budget=NULL, lower_budget=NULL, retrain=FALSE, forceMaxBudget=FALSE) {
   nlopt_num_iter <- num_iter
-  nlopt_xtol_abs <- 100
+  nlopt_xtol_abs <- 10
   WB <- 1
   WH <- 1
   WF <- 1
   
-  source("./displayopt_lib.R")
   if (retrain) {
     model <- runModelAll(file_historical, file_budget_season, file_DR_dataset)
   } else {
@@ -19,17 +19,36 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
     (b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+b[7]+b[8]+b[9]+b[10]+b[11])
   }
   
-  eq <- function(b) {
-    constr <- predictModelAll(b, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
-    c1 <- WF*(CA_flight_target - constr$CA_flight)
-    c2 <- WH*(CA_hotel_target - constr$CA_hotel)
-    c3 <- WB*((b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+b[7]+b[8]+b[9]+b[10]+b[11]) - Total_budget)
-    # Sys.sleep(0.005)
-    return(c(c1,c2,c3))
+  if (forceMaxBudget){
+    ineq <- function(b) {
+      constr <- predictModelAll(b, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
+      c1 <- WF*(CA_flight_target - constr$CA_flight)
+      c2 <- WH*(CA_hotel_target - constr$CA_hotel)
+      # Sys.sleep(0.005)
+      return(c(c1,c2))
+    }
+    eq <- function(b) {
+      c3 <- WB*((b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+b[7]+b[8]+b[9]+b[10]+b[11]) - Total_budget)
+      # Sys.sleep(0.005)
+      return(c(c3))
+    } 
+  } else {
+    ineq <- function(b) {
+      constr <- predictModelAll(b, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_pred)
+      c1 <- WF*(CA_flight_target - constr$CA_flight)
+      c2 <- WH*(CA_hotel_target - constr$CA_hotel)
+      c3 <- WB*((b[1]+b[2]+b[3]+b[4]+b[5]+b[6]+b[7]+b[8]+b[9]+b[10]+b[11]) - Total_budget)
+      # Sys.sleep(0.005)
+      return(c(c1,c2,c3))
+    }
   }
   
   if (is.null(lower_budget)){
     B_lower <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$lb
+    user_budget_min <- as.numeric(read.csv(file_to_pred, header = TRUE)$budget_min)
+    for (i in 1:nrow(df_pred)){
+      B_lower[i] <- ifelse(is.na(user_budget_min[i]), B_lower[i], user_budget_min[i])
+    }
   } else {
     if (length(lower_budget)==1){
       B_lower <- rep(lower_budget,nrow(df_pred))
@@ -39,6 +58,10 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
   }
   if (is.null(upper_budget)){
     B_upper <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$ub
+    user_budget_max <- as.numeric(read.csv(file_to_pred, header = TRUE)$budget_max)
+    for (i in 1:nrow(df_pred)){
+      B_upper[i] <- ifelse(is.na(user_budget_max[i]), B_upper[i], user_budget_max[i])
+    }
   } else {
     if (length(upper_budget)==1){
       B_upper <- rep(upper_budget,nrow(df_pred))
@@ -48,6 +71,11 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
   }
   if (is.null(init_budget)){
     init_point <- getNLOptParam(Total_budget, file_DR_dataset, df_pred)$init
+    user_budget_min <- as.numeric(read.csv(file_to_pred, header = TRUE)$budget_min)
+    user_budget_max <- as.numeric(read.csv(file_to_pred, header = TRUE)$budget_max)
+    for (i in 1:nrow(df_pred)){
+      init_point[i] <- ifelse((is.na(user_budget_min[i]) & is.na(user_budget_max[i])), init_point[i], (B_upper[i]+B_lower[i])/2)
+    }
   } else {
     init_point <- init_budget
   }
@@ -62,13 +90,24 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
     nlopt_val <- nlopt_num_iter
   }
   t0 <- proc.time()
-  res <- nloptr(
-    x0 = init_point,
-    eval_f=fn1,
-    lb = B_lower,
-    ub = B_upper,
-    eval_g_ineq = eq,
-    opts = list("algorithm"="NLOPT_LN_AUGLAG",nlopt_con=nlopt_val,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
+  if (forceMaxBudget){
+    res <- nloptr(
+      x0 = init_point,
+      eval_f=fn1,
+      lb = B_lower,
+      ub = B_upper,
+      eval_g_eq = eq,
+      eval_g_ineq = ineq,
+      opts = list("algorithm"="NLOPT_LN_AUGLAG",nlopt_con=nlopt_val,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))
+  } else {
+    res <- nloptr(
+      x0 = init_point,
+      eval_f=fn1,
+      lb = B_lower,
+      ub = B_upper,
+      eval_g_ineq = ineq,
+      opts = list("algorithm"="NLOPT_LN_AUGLAG",nlopt_con=nlopt_val,"local_opts"=list("algorithm"="NLOPT_LN_COBYLA")))  
+  }
   t1 <- proc.time(); print(t1-t0) # 1800 sec
   
   df_result <- df_pred
@@ -84,8 +123,8 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
   # write.csv(df_result,file_save)
   
   ## Additional step
-  if (forceMaxBudget & (sum(df_result$budget_channel) < Total_budget)) {
-    df_result$budget_channel <- df_result$budget_channel * Total_budget / df_result$budget
+  if (!forceMaxBudget & (sum(df_result$budget_channel) < (Total_budget * 0.95))) {
+    df_result$budget_channel <- df_result$budget_channel * (Total_budget * 0.95) / df_result$budget
     df_result$budget <- Total_budget
     df_result <- normalizeResult(Total_budget, file_DR_dataset, df_result)
     constr <- predictModelAll(df_result$budget_channel, Season, Total_budget, CA_flight_target, CA_hotel_target, model, df_result)
@@ -97,6 +136,7 @@ runNLOptR <- function(file_historical, file_budget_season, file_to_pred, file_DR
     # file_save <- "./data_output_result_fixed.csv"
     # write.csv(df_result,file_save)
   }
-  return(df_result)
+  result <- list("df"=df_result, "model"=model)
+  return(result)
 }
 
