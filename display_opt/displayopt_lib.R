@@ -10,7 +10,7 @@ require(gridExtra)
 library(lubridate)
 # require(astsa)
 library(bsts)
-library(reshape)
+library(reshape2)
 library(dplyr)
 
 createModel <- function(df_historical,df_budseas){
@@ -106,7 +106,9 @@ predictModel <- function(df_topred, budget_prop, model){
     # toPred <- filter(data_test, channel==ch)
     toPred <- data_test[i,]
     pred <- predict(model, burn = 100, quantiles = c(0.25, 0.75), newdata = toPred)
-    res <- pred$median
+    res <- quantile(pred$distribution[,1], 0.6)
+    # res <- pred$interval[2,] 
+    # res <- pred$median
     cost_pred <- c(cost_pred, res)
   }
   data_test$cost <- cost_pred
@@ -117,6 +119,7 @@ prepareTSDataPred <- function(file_to_pred, Season, Total_budget){
   df_pred <- read.csv(file_to_pred, header = TRUE)
   df_pred$season <- Season
   df_pred$budget <- Total_budget / 1e5
+  df_pred <- df_pred %>% select(-c(budget_min, budget_max))
   return(df_pred)
 }
 
@@ -219,7 +222,9 @@ runModelAll <- function(file_historical, file_budget_season, file_DR_dataset=NUL
   # source("./datarobot_template.R")
   if (!is.null(file_DR_dataset)){
     # a. Prepare dataset & run model training
-    df_dr_raw <- read.csv(file_DR_dataset)
+    df_dr_raw <- read.csv(file_DR_dataset) %>%
+      mutate(channel=paste(platform,'-',channel_group)) %>%
+      select(-c(platform, channel_group))
     df <- prepareDRDataset(df_dr_raw)
     # Rename the existing project into the old one
     proj_CA_flight <- getDRProject("MTA: Display Opt - CA_flight")
@@ -277,7 +282,7 @@ predictModelAll <- function(budget_prop, Season, Total_budget, CA_flight_target,
   # budget_prop <- c(16987.33,241097.7,74782.76,84995.68,45363.65,235207.6, 525.441,21842.27,3772.961,30000,53340.3)
   ## (3) Predict the CA given budget
   # a. Predict the future cost for each channel
-  data_pred <- predictModel(df_pred, budget_prop, PARAM_model_ts)
+  data_pred <- predictModel(PARAM_df_pred, budget_prop, PARAM_model_ts)
   # b. Predict the future CA for each channel
   df_pred_CA <- prepareDRDataPred(data_pred, PARAM_Total_budget, PARAM_CA_flight_target, PARAM_CA_hotel_target)
   df_pred_CA <- predictDRModel(df_pred_CA, PARAM_model_CA_flight, PARAM_model_CA_flight, "CA_flight")
@@ -298,15 +303,26 @@ getNLOptParam <- function(Total_budget, file_DR_dataset, df_pred){
     ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
     # ch <- "android - FB App Install"
     ch_cost <- df %>%
+      mutate(channel=paste(platform,'-',channel_group)) %>%
+      select(-c(platform, channel_group)) %>%
       mutate(month=as.Date(month, "%m/%d/%Y")) %>%
       filter((as.character(channel) == ch) & !(is.na(cost))) %>%
       mutate(budget=ifelse(budget>Total_budget, Total_budget, budget)) %>%
       mutate(cost=cost*Total_budget/budget) %>%
       arrange(month) %>%
       tail(3)
-    maxcost <- min(Total_budget, quantile(ch_cost$cost, 1.00)*1.25)
-    mincost <- max(0,            quantile(ch_cost$cost, 0.00)*0.75)
-    initcost <- min(Total_budget, quantile(ch_cost$cost, 0.8))
+    if (nrow(ch_cost)>0) { 
+      ccost_max <- quantile(ch_cost$cost, 1.00)*1.25
+      ccost_min <- quantile(ch_cost$cost, 0.00)*0.75
+      ccost_init<- quantile(ch_cost$cost, 0.75)*1.00 
+    } else { 
+      ccost_max <- Total_budget/nrow(df_pred)
+      ccost_min <- 0
+      ccost_init<- Total_budget/(nrow(df_pred)*2) 
+    }
+    maxcost <- min(Total_budget, ccost_max)
+    mincost <- max(0,            ccost_min)
+    initcost<- min(Total_budget, ccost_init)
     ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
   }
   res <- list("ub"=ub, "lb"=lb, "init"=init)
@@ -323,15 +339,26 @@ normalizeResult <- function(Total_budget, file_DR_dataset, df){
     ch <- paste(df_pred$platform[i],"-",df_pred$channel_group[i])
     # ch <- "android - FB App Install"
     ch_cost <- df_data %>%
+      mutate(channel=paste(platform,'-',channel_group)) %>%
+      select(-c(platform, channel_group)) %>%
       mutate(month=as.Date(month, "%m/%d/%Y")) %>%
       filter((as.character(channel) == ch) & !(is.na(cost))) %>%
       mutate(budget=ifelse(budget>Total_budget, Total_budget, budget)) %>%
       mutate(cost=cost*Total_budget/budget) %>%
       arrange(month) %>%
       tail(3)
-    maxcost <- min(Total_budget, quantile(ch_cost$cost, 1.00)*1.25)
-    mincost <- max(0,            quantile(ch_cost$cost, 0.00)*0.75)
-    initcost <- min(Total_budget, quantile(ch_cost$cost, 0.8))
+    if (nrow(ch_cost)>0) { 
+      ccost_max <- quantile(ch_cost$cost, 1.00)*1.25
+      ccost_min <- quantile(ch_cost$cost, 0.00)*0.75
+      ccost_init<- quantile(ch_cost$cost, 0.75)*1.00 
+    } else { 
+      ccost_max <- Total_budget/nrow(df_pred)
+      ccost_min <- 0
+      ccost_init<- Total_budget/(nrow(df_pred)*2) 
+    }
+    maxcost <- min(Total_budget, ccost_max)
+    mincost <- max(0,            ccost_min)
+    initcost<- min(Total_budget, ccost_init)
     # ub[i] <- maxcost; lb[i] <- mincost; init[i] <- initcost
     val <- df_pred[i,"budget_channel"]
     val <- ifelse(val>=maxcost, 0.99*maxcost, val)
